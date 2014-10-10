@@ -14,6 +14,7 @@ namespace median
         static readonly int MaskSize = 9;
         static readonly int Med = (int) Math.Round(MaskSize / 2.0);
         static readonly int Diff = 3;
+        static readonly int ThreadCount = 4;
         
         static void CalcValue(int row, int col, int shift, int width, ref byte[] source, ref byte[] target)
         {
@@ -83,28 +84,30 @@ namespace median
 
             System.Runtime.InteropServices.Marshal.Copy(ptr, sourceBytes, 0, length);
 
-            for (int i = 1; i < img.Height - 1; i++)
+            List<Thread> pool = new List<Thread>();
+            for (int i = 0; i < ThreadCount; i++)
             {
-                for (int j = 1; j < img.Width - 1; j++)
-                {
-                    CalcValue(i, j * 3, 0, width, ref sourceBytes, ref targetBytes);
-                    CalcValue(i, j * 3, 1, width, ref sourceBytes, ref targetBytes);
-                    CalcValue(i, j * 3, 2, width, ref sourceBytes, ref targetBytes);
-                }
+                var partial = new PartialFilter(ThreadCount, i, img.Width, img.Height, width, sourceBytes, targetBytes);
+                pool.Add(new Thread(partial.StartComputation));
             }
+
+            while (pool.Any((x) => x.IsAlive)) { }
 
             System.Runtime.InteropServices.Marshal.Copy(targetBytes, 0, ptr, length);
 
             img.UnlockBits(bitmapData);
-            img.Save(outputPath);
+            img.Save(outputPath, ImageFormat.Bmp);
         }
-
 
         static void Main(string[] args)
         {
             var time = DateTime.Now.Millisecond;
             STFilter(args[0], args[1]);
             Console.WriteLine("Single-Threaded taken {0} ms", DateTime.Now.Millisecond - time);
+
+            time = DateTime.Now.Millisecond;
+            MTFilter(args[0], args[2]);
+            Console.WriteLine("Multi-Threaded taken {0} ms", DateTime.Now.Millisecond - time);
         }
     }
 }
